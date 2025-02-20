@@ -51,8 +51,11 @@ def visualize_annotations(image_path, label_path):
             # 计算多边形的中心点，以便显示标签
             if len(points) >= 4:
                 center = np.mean(points[:4], axis=0).astype(int)
+                # 设置标签显示位置，稍微偏移
+                offset_x, offset_y = 10, -10  # 偏移量
+                label_position = (center[0] + offset_x, center[1] + offset_y)
                 # 显示class_id
-                cv.putText(img, class_id, tuple(center), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv.LINE_AA)
+                cv.putText(img, class_id, label_position, cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv.LINE_AA)
 
     # 显示带标注的图像
     cv.imshow("Image with annotations", img)
