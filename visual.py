@@ -47,6 +47,12 @@ def visualize_annotations(image_path, label_path):
             # 绘制每个点
             for point in points:
                 cv.circle(img, point, 3, (255, 0, 0), -1)
+            
+            # 计算多边形的中心点，以便显示标签
+            if len(points) >= 4:
+                center = np.mean(points[:4], axis=0).astype(int)
+                # 显示class_id
+                cv.putText(img, class_id, tuple(center), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv.LINE_AA)
 
     # 显示带标注的图像
     cv.imshow("Image with annotations", img)
@@ -55,8 +61,9 @@ def visualize_annotations(image_path, label_path):
 
 if __name__ == "__main__":
     # 输入图像和标注文件的路径
-    image_path = '/home/test/Desktop/Tools/output/2.jpg'
-    label_path = '/home/test/Desktop/Tools/output/2.txt'
+    image_path = './dataset/24_fq_sy_outpost17.jpg'
+    label_path = './dataset/24_fq_sy_outpost17.txt'
     
     # 调用可视化函数
     visualize_annotations(image_path, label_path)
+
