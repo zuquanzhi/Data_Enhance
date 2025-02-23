@@ -268,10 +268,10 @@ def steal(dir1, dir2, dir3):
 # tf(img1, labels1, output_labels1, img2, labels2, output_labels2)
 
 # dir1 = "/home/horsefly/下载/hero哨兵/train"
-# dir1 = "/home/horsefly/下载/北邮新哨兵/images/train"
-dir1 = "/home/test/Desktop/Data_Enhance/images/new_sentry"
-dir2 = "/home/test/Desktop/Data_Enhance/images/temp"
-dir3 = "/home/test/Desktop/Data_Enhance/output"
+# dir1 = "/home/horsefly/下载/北邮新哨兵/images/train" 
+dir1 = "/home/hero/Datasets/TotalData/outpost_new2/blue"  ## 路径贴图
+dir2 = "/home/hero/Datasets/TotalData/outpost_new2/red"   ## 背景路径
+dir3 = "/home/hero/Datasets/TotalData/zwc_outpost_create" ## 输出路径
 
 steal(dir1, dir2, dir3)
 
