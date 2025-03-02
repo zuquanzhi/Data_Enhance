@@ -15,6 +15,27 @@ def parse_label(label_line):
     points = np.array(parts[1:]).reshape(4, 2)  # 转换为4个点的坐标
     return class_id, points
 
+def inpaint_edge(image, mask):
+    """使用OpenCV的inpaint方法修补掩码区域
+    Args:
+        image: 输入图像
+        mask: 掩码
+    Returns:
+        inpainted_image: 修补后的图像
+    """
+    # 增加修复半径
+    inpaint_radius = 10  # 增大修复半径
+    
+    # 先进行修复
+    inpainted_image = cv2.inpaint(image, mask, inpaintRadius=inpaint_radius, flags=cv2.INPAINT_TELEA)
+    
+    # 对修复区域进行模糊处理
+    blur_mask = cv2.dilate(mask, None, iterations=2)  # 扩大模糊区域
+    blurred = cv2.GaussianBlur(inpainted_image, (15, 15), 0)  # 高斯模糊
+    inpainted_image = np.where(blur_mask[:, :, None] == 255, blurred, inpainted_image)
+    
+    return inpainted_image
+
 def draw_polygon_mask(image_shape, points):
     """绘制多边形的掩码
     Args:
@@ -28,8 +49,8 @@ def draw_polygon_mask(image_shape, points):
     cv2.fillPoly(mask, [points], 255)  # 填充多边形
     return mask
 
-def generate_edge_mask(points, edge_index, image_shape, thickness=5):
-    """生成某一条边的掩码
+def generate_edge_mask(points, edge_index, image_shape, thickness=8):
+    """生成某一条边的掩码，增加处理区域
     Args:
         points: 四个点的坐标
         edge_index: 要隐藏的边的索引 (0, 1, 2, 3)
@@ -38,15 +59,36 @@ def generate_edge_mask(points, edge_index, image_shape, thickness=5):
     Returns:
         mask: 边缘掩码
     """
-    # 创建与输入图像相同大小的掩码
     mask = np.zeros(image_shape[:2], dtype=np.uint8)
     
     # 获取当前边的两个端点
     p1 = points[edge_index]
-    p2 = points[(edge_index + 1) % 4]  # 下一个点
+    p2 = points[(edge_index + 1) % 4]
     
-    # 绘制线段
-    cv2.line(mask, tuple(p1.astype(int)), tuple(p2.astype(int)), 255, thickness=thickness)
+    # 计算边的方向向量
+    direction = p2 - p1
+    length = np.linalg.norm(direction)
+    direction = direction / length
+    
+    # 计算垂直方向
+    perpendicular = np.array([-direction[1], direction[0]])
+    
+    # 创建扩展区域的多边形点
+    extension = thickness * 1.5  # 扩大处理区域
+    poly_points = np.array([
+        p1 + perpendicular * extension,
+        p2 + perpendicular * extension,
+        p2 - perpendicular * extension,
+        p1 - perpendicular * extension
+    ], dtype=np.int32)
+    
+    # 填充多边形区域
+    cv2.fillPoly(mask, [poly_points], 255)
+    
+    # 对掩码进行膨胀处理，使边缘更平滑
+    kernel = np.ones((5,5), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=2)
+    
     return mask
 
 def inpaint_edge(image, mask):
@@ -105,7 +147,7 @@ def process_image(image_path, label_path, output_path, mode='random',thickness=5
 
     # 保存结果
     cv2.imwrite(output_path, image)
-    print(f"处理完成，结果已保存到 {output_path}")
+    # print(f"处理完成，结果已保存到 {output_path}")
 
 
 import os
@@ -133,9 +175,13 @@ def process_directory(input_dir, output_dir, mode='random', thickness=5):
             if os.path.exists(os.path.join(input_dir, label_file)):
                 label_files.append(label_file)
     
-    # 创建进度条
-    pbar = tqdm(total=len(image_files), desc="处理进度")
-    
+    # 创建进度条，禁用输出刷新
+    pbar = tqdm(total=len(image_files), 
+                desc="处理进度",
+                ncols=80,  # 固定宽度
+                leave=True,  # 保留最终进度
+                position=0  # 固定位置
+)
     # 处理每个图像
     for image_file in image_files:
         name, _ = os.path.splitext(image_file)
@@ -163,8 +209,9 @@ def process_directory(input_dir, output_dir, mode='random', thickness=5):
         except Exception as e:
             print(f"处理 {image_file} 失败: {str(e)}")
             
+        # 更新进度条，简化显示信息
+        pbar.set_postfix_str(f"当前: {name}")
         pbar.update(1)
-        pbar.set_postfix({"当前文件": image_file})
     
     pbar.close()
 
