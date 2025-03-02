@@ -104,7 +104,7 @@ python video_to_images.py --video input.mp4 --output frames/ --fps 30
 可视化 YOLO 格式的标注文件。
 
 ```bash
-python visual.py --image image.jpg --label image.txt
+python visual.py --image image
 ```
 
 ## 文件格式要求

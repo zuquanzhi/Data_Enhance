@@ -3,275 +3,250 @@ import os
 import math
 import numpy as np
 import random
-from tqdm import tqdm  # 添加tqdm导入
+import argparse
+from tqdm import tqdm
+
+def adjust_points(point1, point2, length_ratio=0.5):
+    """调整两点的位置
+    Args:
+        point1: 第一个点的坐标 [x, y]
+        point2: 第二个点的坐标 [x, y]
+        length_ratio: 延长比例，默认0.5
+    Returns:
+        point1_adjusted, point2_adjusted: 调整后的两点坐标
+    """
+    point1_adjusted = point1.copy()
+    point2_adjusted = point2.copy()
+    
+    length = math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
+    
+    if point2[0] - point1[0] != 0:
+        angle = math.atan((point2[1] - point1[1]) / (point2[0] - point1[0]))
+    else:
+        angle = math.pi / 2
+        
+    det_y = abs(int(length * length_ratio * math.sin(angle)))
+    det_x = int(angle / abs(angle) * length * length_ratio * math.cos(angle))
+    
+    point1_adjusted[1] -= det_y
+    point2_adjusted[1] += det_y
+    point1_adjusted[0] -= det_x
+    point2_adjusted[0] += det_x
+    
+    return point1_adjusted, point2_adjusted
 
 
-
-# 1、将四点自适应扩大
-def scale(img, labels):
-    # 获取图像大小
-    height, width, _ = img.shape
-    output_labels = []
-
+def scale(image, labels, vertical_ratio=0.5, horizontal_ratio=0.2):
+    """将四点自适应扩大
+    Args:
+        image: 输入图像
+        labels: 标注数据
+        vertical_ratio: 纵向扩展比例，默认0.5
+        horizontal_ratio: 横向扩展比例，默认0.2
+    Returns:
+        adjusted_labels: 调整后的标注数据
+    """
+    height, width, _ = image.shape
+    adjusted_labels = []
+    
     for label in labels:
-        # 依次处理每行标签
         temp = label.split(' ')
-        for i in range(len(temp)):
-            temp[i] = float(temp[i])
-
+        temp = [float(x) for x in temp]
+        
         # 将坐标化为绝对坐标
-        xyxyxyxy = list(map(lambda x, y: x * y, temp[1:], [width, height, width, height, width, height, width, height]))
+        coords = list(map(lambda x, y: x * y, temp[1:], [width, height] * 4))
+        points = [list(map(int, coords[i:i+2])) for i in range(0, 8, 2)]
+        
+        # 复制点以防修改原始数据
+        points_adjusted = [p.copy() for p in points]
+        
+        # 纵向拉长point1-point2和point4-point3
+        points_adjusted[0], points_adjusted[1] = adjust_points(points_adjusted[0], points_adjusted[1], vertical_ratio)
+        points_adjusted[3], points_adjusted[2] = adjust_points(points_adjusted[3], points_adjusted[2], vertical_ratio)
+        
+        # 横向拉长point1-point4和point2-point3
+        points_adjusted[0], points_adjusted[3] = adjust_points(points_adjusted[0], points_adjusted[3], horizontal_ratio)
+        points_adjusted[1], points_adjusted[2] = adjust_points(points_adjusted[1], points_adjusted[2], horizontal_ratio)
+        
+        # 合并调整后的坐标
+        adjusted_coords = []
+        for p in points_adjusted:
+            adjusted_coords.extend(p)
+            
+        adjusted_labels.append(adjusted_coords)
+        
+    return adjusted_labels
 
-        p1 = list(map(int, xyxyxyxy[0: 2]))
-        p2 = list(map(int, xyxyxyxy[2: 4]))
-        p3 = list(map(int, xyxyxyxy[4: 6]))
-        p4 = list(map(int, xyxyxyxy[6: 8]))
-
-        # cv.line(img, p1, p2, color=(0, 255, 0), thickness=1)
-        # cv.line(img, p2, p3, color=(0, 255, 0), thickness=1)
-        # cv.line(img, p3, p4, color=(0, 255, 0), thickness=1)
-        # cv.line(img, p4, p1, color=(0, 255, 0), thickness=1)
-
-        p1_s = p1
-        p2_s = p2
-        p3_s = p3
-        p4_s = p4
-
-        # 纵向拉长p1，p2
-        length1 = pow((p1[0] - p2[0]) * (p1[0] - p2[0]) + (p1[1] - p2[1]) * (p1[1] - p2[1]), 0.5)
-        if p2[0] - p1[0] != 0:
-            theta1 = math.atan((p2[1] - p1[1]) / (p2[0] - p1[0]))
-        else:
-            theta1 = 3.1415926 / 2
-        det1_y = abs(int(length1 * 0.5 * math.sin(theta1)))
-        det1_x = int(theta1 / abs(theta1) * length1 * 0.5 * math.cos(theta1))
-        p1_s[1] -= det1_y
-        p2_s[1] += det1_y
-        p1_s[0] -= det1_x
-        p2_s[0] += det1_x
-
-        # 纵向拉长p4，p3
-        length2 = pow((p4[0] - p3[0]) * (p4[0] - p3[0]) + (p4[1] - p3[1]) * (p4[1] - p3[1]), 0.5)
-        if p3[0] - p4[0] != 0:
-            theta2 = math.atan((p3[1] - p4[1]) / (p3[0] - p4[0]))
-        else:
-            theta2 = 3.1415926 / 2
-        det2_y = abs(int(length2 * 0.5 * math.sin(theta2)))
-        det2_x = int(theta2 / abs(theta2) * length2 * 0.5 * math.cos(theta2))
-        p4_s[1] -= det2_y
-        p3_s[1] += det2_y
-        p4_s[0] -= det2_x
-        p3_s[0] += det2_x
-
-        # cv.line(img, p1_s, p2_s, color=(255, 255, 0), thickness=1)
-        # cv.line(img, p2_s, p3_s, color=(255, 255, 0), thickness=1)
-        # cv.line(img, p3_s, p4_s, color=(255, 255, 0), thickness=1)
-        # cv.line(img, p4_s, p1_s, color=(255, 255, 0), thickness=1)
-
-        # 横向拉长p1，p4
-        length3 = pow((p1[0] - p4[0]) * (p1[0] - p4[0]) + (p1[1] - p4[1]) * (p1[1] - p4[1]), 0.5)
-        theta3 = math.atan((p1[1] - p4[1]) / (p1[0] - p4[0]))
-        det3_x = abs(int(length3 * 0.2 * math.cos(theta3)))
-        det3_y = int(length3 * 0.2 * math.sin(theta3))
-        p1_s[0] -= det3_x
-        p4_s[0] += det3_x
-        p1_s[1] -= det3_y
-        p4_s[1] += det3_y
-
-        # 横向拉长p2，p3
-        length4 = pow((p2[0] - p3[0]) * (p2[0] - p3[0]) + (p2[1] - p3[1]) * (p2[1] - p3[1]), 0.5)
-        theta4 = math.atan((p2[1] - p3[1]) / (p2[0] - p3[0]))
-        det4_x = abs(int(length4 * 0.2 * math.cos(theta4)))
-        det4_y = int(length4 * 0.2 * math.sin(theta4))
-        p2_s[0] -= det4_x
-        p3_s[0] += det4_x
-        p2_s[1] -= det4_y
-        p3_s[1] += det4_y
-
-        # cv.line(img, p1_s, p2_s, color=(0, 0, 255), thickness=1)
-        # cv.line(img, p2_s, p3_s, color=(0, 0, 255), thickness=1)
-        # cv.line(img, p3_s, p4_s, color=(0, 0, 255), thickness=1)
-        # cv.line(img, p4_s, p1_s, color=(0, 0, 255), thickness=1)
-
-        output_labels.append(p1_s + p2_s + p3_s + p4_s)
-
-    return output_labels
-
-# 2、进行透视变换
-# img1是哨兵图，img2为其他图，传入原来的点，扩大的点，返回变换后的图以及变换后哨兵装甲板的四点坐标
-def tf(img1, label1, label1_s, img2, label2, label2_s):
-    # cv.imshow('img2_ori', img2)
+# 进行透视变换
+def perspective_transform(image1, label1, adjusted_labels1, image2, label2, adjusted_labels2):
     output_labels = []
-    for i in range(len(label2_s)):
-        temp1 = np.float32([[label1_s[0][0], label1_s[0][1]], [label1_s[0][2], label1_s[0][3]],
-                            [label1_s[0][4], label1_s[0][5]], [label1_s[0][6], label1_s[0][7]]])
-
-        temp2 = np.float32([[label2_s[i][0], label2_s[i][1]], [label2_s[i][2], label2_s[i][3]],
-                            [label2_s[i][4], label2_s[i][5]], [label2_s[i][6], label2_s[i][7]]])
-
-        matrix = cv.getPerspectiveTransform(temp1, temp2)
-
-        height2, width2, _ = img2.shape
-        height1, width1, _ = img1.shape
-        result = cv.warpPerspective(img1, matrix, (width2, height2))
-
+    for i in range(len(adjusted_labels2)):
+        points1 = np.float32([[adjusted_labels1[0][0], adjusted_labels1[0][1]], [adjusted_labels1[0][2], adjusted_labels1[0][3]],
+                            [adjusted_labels1[0][4], adjusted_labels1[0][5]], [adjusted_labels1[0][6], adjusted_labels1[0][7]]])
+        points2 = np.float32([[adjusted_labels2[i][0], adjusted_labels2[i][1]], [adjusted_labels2[i][2], adjusted_labels2[i][3]],
+                            [adjusted_labels2[i][4], adjusted_labels2[i][5]], [adjusted_labels2[i][6], adjusted_labels2[i][7]]])
+        matrix = cv.getPerspectiveTransform(points1, points2)
+        height2, width2, _ = image2.shape
+        result = cv.warpPerspective(image1, matrix, (width2, height2))
         # 制作掩膜
         mask = np.zeros((height2, width2), dtype=np.uint8)
         # 绘制白色矩形
-        points = np.array(np.expand_dims(temp2, axis=0), dtype=np.int32)
+        points = np.array(np.expand_dims(points2, axis=0), dtype=np.int32)
         cv.polylines(mask, points, True, (255, 255, 255, 0))
         # 填充矩形
         cv.fillPoly(mask, points, (255, 255, 255))
         # 覆盖
-        cv.copyTo(result, mask, img2)
-
+        cv.copyTo(result, mask, image2)
         # 将标签通过投射变换矩阵进行变换
-        folder_label = label1[0].split(' ')
-        folder_label = np.array(folder_label[1:], np.float32)
-        folder_label *= ([width1, height1] * 4)
-        folder_label = folder_label.reshape(4, 2)
+        label_coords = label1[0].split(' ')
+        label_coords = np.array(label_coords[1:], np.float32)
+        label_coords *= ([image1.shape[1], image1.shape[0]] * 4)
+        label_coords = label_coords.reshape(4, 2)
         new_col = [1, 1, 1, 1]
-        folder_label = np.column_stack((folder_label, new_col))
-        folder_label = np.transpose(folder_label)
-        tf_label = np.dot(matrix, folder_label)
-        tf_label = np.transpose(tf_label)
-        tf_label[:, :2] /= tf_label[:, 2:3]
-        tf_label = np.array(tf_label[:, :2], np.int32)
+        label_coords = np.column_stack((label_coords, new_col))
+        label_coords = np.transpose(label_coords)
+        transformed_label = np.dot(matrix, label_coords)
+        transformed_label = np.transpose(transformed_label)
+        transformed_label[:, :2] /= transformed_label[:, 2:3]
+        transformed_label = np.array(transformed_label[:, :2], np.int32)
+        new_label = ""
+        for point in transformed_label:
+            new_label += str(round(point[0] / width2, 6)) + " " + str(round(point[1] / height2, 6)) + " "
+        new_label = new_label[:-1]
+        output_labels.append(new_label)
+    return image2, output_labels
 
-        # 新造一个字符串用来写入
-        newboy = ""
-        for boy in tf_label:
-            newboy = newboy + str(round(boy[0] / width2, 6)) + " " + str(round(boy[1] / height2, 6)) + " "
-        # 去掉最后一个空格
-        newboy = newboy[:-1]
+# 3. 对已有目标对象进行替换
 
-        output_labels.append(newboy)
-
-        # cv.line(img2, tf_label[0], tf_label[1], color=(0, 255, 0), thickness=1)
-        # cv.line(img2, tf_label[1], tf_label[2], color=(0, 255, 0), thickness=1)
-        # cv.line(img2, tf_label[2], tf_label[3], color=(0, 255, 0), thickness=1)
-        # cv.line(img2, tf_label[3], tf_label[0], color=(0, 255, 0), thickness=1)
-
-    # cv.imshow('img1', img1)
-    # cv.imshow('img2', img2)
-    # cv.waitKey(0)
-
-    return img2, output_labels
-
-# 3、对已有哨兵进行替换
-# 接收三个地址，保存到最后一个地址
-def steal(dir1, dir2, dir3):
-    # 拿出哨兵数据
-    sentry_img_files = []
-    sentry_label_files = []
-    files = os.listdir(dir1)
+def replace_object_data(input_dir, reference_dir, output_dir, start_index=100):
+    """对已有目标对象进行替换"""
+    # 确保输出目录存在
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 拿出目标对象数据
+    object_image_files = []
+    object_label_files = []
+    files = os.listdir(input_dir)
     for file in files:
         name, suf = file.split(".")
         if suf == 'txt':
-            sentry_label_files.append(file)
+            object_label_files.append(file)
         else:
-            sentry_img_files.append(file)
-
-
-        # 拿出其他数据
-    other_img_files = []
+            object_image_files.append(file)
+    
+    # 拿出其他数据
+    other_image_files = []
     other_label_files = []
-    new_files = os.listdir(dir2)
+    new_files = os.listdir(reference_dir)
     for new_file in new_files:
-        if os.path.isfile(os.path.join(dir2, new_file)):
+        if os.path.isfile(os.path.join(reference_dir, new_file)):
             name, suf = new_file.split(".")
             if suf == 'txt':
                 other_label_files.append(new_file)
             else:
-                other_img_files.append(new_file)
-
-    # 遍历哨兵数据
-    for i in tqdm(range(len(sentry_img_files)), desc="处理进度"):
-        # 获取哨兵图片和标签
-        sentry_img = cv.imread(os.path.join(dir1, sentry_img_files[i]))
-        sentry_label = []
-        temp_name, _ = sentry_img_files[i].split('.')
-        if os.path.exists(os.path.join(dir1, temp_name + '.txt')) == False:
+                other_image_files.append(new_file)
+    
+    # 创建进度条
+    pbar = tqdm(total=len(object_image_files), 
+                desc="处理进度",
+                ncols=100)
+    
+    # 遍历目标对象数据
+    for i in range(len(object_image_files)):
+        # 获取目标对象图片和标签
+        object_img = cv.imread(os.path.join(input_dir, object_image_files[i]))
+        object_label = []
+        temp_name, _ = object_image_files[i].split('.')
+        
+        if not os.path.exists(os.path.join(input_dir, temp_name + '.txt')):
+            pbar.update(1)
             continue
-        with open(os.path.join(dir1, temp_name + '.txt')) as temp_file:
-            # 只拿一个哨兵装甲板
+            
+        with open(os.path.join(input_dir, temp_name + '.txt')) as temp_file:
+            # 只拿一个目标对象
             for line in temp_file:
-                sentry_label.append(line)
+                object_label.append(line)
                 break
-        # 获得自适应扩大的标签
-        sentry_label_out = scale(sentry_img, sentry_label)
-
-        # 获得该哨兵装甲板标签（如果为空标签则跳过）
-        if len(sentry_label) == 0:
+                
+        object_label_adjusted = scale(object_img, object_label)
+        
+        if len(object_label) == 0:
+            pbar.update(1)
             continue
-        temp_boys = sentry_label[0].split(' ')
+            
+        temp_boys = object_label[0].split(' ')
         boy = temp_boys[0]
-
-        # 获取其他图片和标签
+        
+        # 查找合适的背景图片
         while True:
-            # 获取下标
-            temp_key = random.randint(0, len(other_img_files) - 1)
-            # 排除掉大装甲板的情况
-            temp_name1, _ = other_img_files[temp_key].split('.')
+            temp_key = random.randint(0, len(other_image_files) - 1)
+            temp_name1, _ = other_image_files[temp_key].split('.')
             cnt = 0
-            with open(os.path.join(dir2, temp_name1 + '.txt')) as temp_file:
+            with open(os.path.join(reference_dir, temp_name1 + '.txt')) as temp_file:
                 for line in temp_file:
                     temp = line.split(' ')
                     if temp[0] >= '23':
                         cnt += 1
-            # 如果没有大装甲板，则可以使用
             if cnt == 0:
                 break
-
-        other_img = cv.imread(os.path.join(dir2, other_img_files[temp_key]))
+        
+        # 读取背景图片和标注
+        other_img = cv.imread(os.path.join(reference_dir, other_image_files[temp_key]))
         other_label = []
-
-        with open(os.path.join(dir2, temp_name1 + '.txt')) as temp_file:
-            # 将数据都拿出
+        with open(os.path.join(reference_dir, temp_name1 + '.txt')) as temp_file:
             for line in temp_file:
                 other_label.append(line)
-        # 获得自适应扩大的标签
-        other_label_out = scale(other_img, other_label)
-
-        # 进行替换
-        img_out, output_labels = tf(sentry_img, sentry_label, sentry_label_out, other_img, other_label, other_label_out)
-
-        # 保存数据
-        cv.imwrite(dir3 + '/' + str(i) + '.jpg', img_out)
+                
+        other_label_adjusted = scale(other_img, other_label)
+        
+        # 透视变换
+        img_out, output_labels = perspective_transform(
+            object_img, object_label, object_label_adjusted,
+            other_img, other_label, other_label_adjusted
+        )
+        
+        # 保存结果
+        output_index = start_index + i
+        cv.imwrite(os.path.join(output_dir, f'{output_index}.jpg'), img_out)
+        
+        # 更新标签
         for j in range(len(output_labels)):
             output_labels[j] = boy + ' ' + output_labels[j]
-        # 将更改后的标签写入新label文件
-        with open(dir3 + '/' + str(i) + '.txt', 'w') as tem:
+            
+        # 保存标注文件
+        with open(os.path.join(output_dir, f'{output_index}.txt'), 'w') as temp_file:
             for line in output_labels:
-                tem.write(line)
+                temp_file.write(line + '\n')
+                
+        # 更新进度条
+        pbar.update(1)
+        pbar.set_postfix({"当前文件": object_image_files[i]})
+    
+    # 关闭进度条
+    pbar.close()
 
 
+def parse_args():
+    """解析命令行参数"""
+    parser = argparse.ArgumentParser(description='数据增强工具')
+    parser.add_argument('--input', type=str, default='./target',help='输入目录路径,包含待处理的目标图像和标注')
+    parser.add_argument('--reference', type=str, default='./images',help='参考图像目录路径,用于替换背景')
+    parser.add_argument('--output', type=str, default='./output',help='输出目录路径')
+    parser.add_argument('--start-index', type=int, default=250,help='输出文件的起始编号')
+    return parser.parse_args()
 
-# img1_dir = "/home/horsefly/armor_det/armorDet/mine/resource/HERO-23-OTH-83.jpg"
-# label1_dir = "/home/horsefly/armor_det/armorDet/mine/resource/HERO-23-OTH-83.txt"
-# img1 = cv.imread(img1_dir)
-# labels1 = []
-# with open(label1_dir, 'r') as file:
-#     for line in file:
-#         labels1.append(line)
-# output_labels1 = scale(img1, labels1)
-#
-# img2_dir = "/home/horsefly/armor_det/armorDet/mine/resource/136.png"
-# label2_dir = "/home/horsefly/armor_det/armorDet/mine/resource/136.txt"
-# img2 = cv.imread(img2_dir)
-# labels2 = []
-# with open(label2_dir, 'r') as file:
-#     for line in file:
-#         labels2.append(line)
-# output_labels2 = scale(img2, labels2)
-#
-# tf(img1, labels1, output_labels1, img2, labels2, output_labels2)
+def main():
+    """主函数"""
+    # 解析命令行参数
+    args = parse_args()
+    
+    # 执行数据增强
+    replace_object_data(
+        args.input,
+        args.reference,
+        args.output,
+        args.start_index
+    )
 
-# dir1 = "/home/horsefly/下载/hero哨兵/train"
-# dir1 = "/home/horsefly/下载/北邮新哨兵/images/train" 
-dir1 = "/home/hero/Datasets/TotalData/outpost_new2/blue"  ## 路径贴图
-dir2 = "/home/hero/Datasets/TotalData/outpost_new2/red"   ## 背景路径
-dir3 = "/home/hero/Datasets/TotalData/zwc_outpost_create" ## 输出路径
-
-steal(dir1, dir2, dir3)
-
+if __name__ == "__main__":
+    main()

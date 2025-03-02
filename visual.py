@@ -2,6 +2,7 @@ import cv2 as cv
 import os
 import numpy as np
 from collections import deque
+import argparse
 
 def load_image_and_annotations(image_path, label_path):
     """加载图像和标注"""
@@ -49,7 +50,6 @@ def draw_annotations(img, annotations):
                       cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv.LINE_AA)
     
     return img_copy
-
 def visualize_annotations(image_folder):
     """
     遍历文件夹内的所有图像和同名的标注文件，显示标注点并连接。
@@ -65,6 +65,10 @@ def visualize_annotations(image_folder):
     # 创建固定窗口
     window_title = "Image Viewer"
     cv.namedWindow(window_title, cv.WINDOW_NORMAL)
+    
+    # 设置窗口初始大小（例如 1280x720）
+    window_width, window_height = 1280, 720
+    cv.resizeWindow(window_title, window_width, window_height)
     
     # 初始化图像缓存
     cache_size = 3  # 缓存前后各1张图片
@@ -82,7 +86,10 @@ def visualize_annotations(image_folder):
                 label_path = os.path.join(image_folder, os.path.splitext(image_file)[0] + ".txt")
                 img, annot = load_image_and_annotations(image_path, label_path)
                 if img is not None:
-                    image_cache[idx] = (img, annot, image_file)
+                    # 调整图像分辨率以适应窗口
+                    scale_factor = min(window_width / img.shape[1], window_height / img.shape[0])
+                    resized_img = cv.resize(img, (int(img.shape[1] * scale_factor), int(img.shape[0] * scale_factor)))
+                    image_cache[idx] = (resized_img, annot, image_file)
         
         # 清理不需要的缓存
         keys = list(image_cache.keys())
@@ -110,8 +117,12 @@ def visualize_annotations(image_folder):
             cv.putText(img_copy, path_text, (10, 60), cv.FONT_HERSHEY_SIMPLEX, 
                       0.7, (0, 255, 255), 2, cv.LINE_AA)
             
-            # 更新窗口
-            cv.setWindowTitle(window_title, f"Image Viewer - {image_file}")
+            # 更新窗口标题为当前文件名
+            # cv.setWindowTitle(window_title, os.path.splitext(image_file)[0])
+            ## 更新窗口标题为当前文件名+拓展名
+            cv.setWindowTitle(window_title, image_file)
+            
+            # 显示图像
             cv.imshow(window_title, img_copy)
         
         # 等待用户输入
@@ -130,6 +141,11 @@ def visualize_annotations(image_folder):
     
     cv.destroyWindow(window_title)
 
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="数据集标注可视化工具")
+    parser.add_argument("--image", type=str, help="图像文件夹路径", default="./images")
+    return parser.parse_args()
+
 if __name__ == "__main__":
-    image_folder = '/home/hero/Datasets_of_Car/TOTAL/4_5_bp/hr'
-    visualize_annotations(image_folder)
+    args = parse_arguments()
+    visualize_annotations(args.image)
